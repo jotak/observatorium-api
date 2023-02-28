@@ -2,6 +2,7 @@
 package v2
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/prometheus/prometheus/model/labels"
@@ -19,7 +20,7 @@ func Test_AstWalker_SimpleCountExpr(t *testing.T) {
 			total: 3,
 		}, {
 			input: `{first="value"} |= "baz" |= ip("8.8.8.8")`,
-			total: 2,
+			total: 4,
 		},
 	}
 	for _, tc := range tc {
@@ -198,9 +199,10 @@ func Test_AstWalker_AppendORMatcher(t *testing.T) {
 		}
 
 		expr.Walk(func(e interface{}) {
+			fmt.Printf("%T\n", e)
 			switch ex := e.(type) { //nolint:gocritic
-			case *StreamMatcherExpr:
-				ex.AppendORMatchers(l)
+			case *LogQueryExpr:
+				ex.AppendPipelineMatchers(l, "or")
 			}
 		})
 

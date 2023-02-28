@@ -71,18 +71,26 @@ func enforceValues(mInfo AuthzResponseData, v url.Values) (values string, err er
 		return "", fmt.Errorf("failed parsing LogQL expression: %w", err)
 	}
 
-	expr.Walk(func(expr interface{}) {
-		switch le := expr.(type) {
-		case *logqlv2.StreamMatcherExpr:
-			if mInfo.LogicalOp == logicalOr {
-				le.AppendORMatchers(mInfo.Matchers)
-			} else {
-				le.AppendMatchers(mInfo.Matchers)
+	if mInfo.LogicalOp == logicalOr {
+		// Logical "OR" to combine multiple matchers needs to be done via LogPipelineExpr
+		expr.Walk(func(expr interface{}) {
+			switch le := expr.(type) {
+			case *logqlv2.LogQueryExpr:
+				le.AppendPipelineMatchers(mInfo.Matchers, logicalOr)
+			default:
+				// Do nothing
 			}
-		default:
-			// Do nothing
-		}
-	})
+		})
+	} else {
+		expr.Walk(func(expr interface{}) {
+			switch le := expr.(type) {
+			case *logqlv2.StreamMatcherExpr:
+				le.AppendMatchers(mInfo.Matchers)
+			default:
+				// Do nothing
+			}
+		})
+	}
 
 	v.Set(queryParam, expr.String())
 

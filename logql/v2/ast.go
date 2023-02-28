@@ -39,8 +39,7 @@ func (defaultLogQLExpr) logQLExpr() {}
 
 type StreamMatcherExpr struct {
 	defaultLogQLExpr
-	matchers   []*labels.Matcher
-	orMatchers []*labels.Matcher
+	matchers []*labels.Matcher
 }
 
 func newStreamMatcherExpr(matchers []*labels.Matcher) *StreamMatcherExpr {
@@ -55,10 +54,6 @@ func (s *StreamMatcherExpr) AppendMatchers(m []*labels.Matcher) {
 	s.matchers = append(s.matchers, m...)
 }
 
-func (s *StreamMatcherExpr) AppendORMatchers(m []*labels.Matcher) {
-	s.orMatchers = append(s.orMatchers, m...)
-}
-
 func (s *StreamMatcherExpr) Walk(fn WalkFn) {
 	fn(s)
 }
@@ -66,15 +61,9 @@ func (s *StreamMatcherExpr) Walk(fn WalkFn) {
 func (s *StreamMatcherExpr) String() string {
 	var sb strings.Builder
 
-	sb.WriteString("{")
+	sb.WriteRune('{')
 	sb.WriteString(matchersToString(s.matchers, ", "))
-
-	sb.WriteString("}")
-
-	if len(s.orMatchers) > 0 {
-		sb.WriteString(" | ")
-		sb.WriteString(matchersToString(s.orMatchers, " or "))
-	}
+	sb.WriteRune('}')
 
 	return sb.String()
 }
@@ -437,6 +426,27 @@ func (l *LogQueryExpr) Matchers() []*labels.Matcher {
 	return l.left.matchers
 }
 
+func (l *LogQueryExpr) AppendPipelineMatchers(matchers []*labels.Matcher, chainOp string) {
+	if len(matchers) == 0 {
+		return
+	}
+	matchersFilter := LogLabelFilterExpr{
+		labelName:    matchers[0].Name,
+		comparisonOp: matchers[0].Type.String(),
+		labelValue:   matchers[0].Value,
+	}
+	for _, m := range matchers[1:] {
+		matchersFilter.right = append(matchersFilter.right, &LogLabelFilterExpr{
+			labelName:    m.Name,
+			comparisonOp: m.Type.String(),
+			labelValue:   m.Value,
+			isNested:     true,
+			chainOp:      chainOp,
+		})
+	}
+	l.filter = append(l.filter, &matchersFilter)
+}
+
 func (l *LogQueryExpr) String() string {
 	var sb strings.Builder
 
@@ -453,6 +463,7 @@ func (l *LogQueryExpr) String() string {
 func (l *LogQueryExpr) Walk(fn WalkFn) {
 	fn(l)
 	l.left.Walk(fn)
+	l.filter.Walk(fn)
 }
 
 type LogRangeQueryExpr struct {
